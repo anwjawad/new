@@ -27,6 +27,30 @@ let appData = {
     currentPatient: null
 };
 
+// Toggle Mobile Sidebar
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+
+    // Toggle Sidebar visibility
+    if (sidebar.classList.contains('-translate-x-full')) {
+        // Open
+        sidebar.classList.remove('-translate-x-full');
+
+        // Show Overlay
+        overlay.classList.remove('hidden');
+        // Small delay to allow display:block to apply before opacity transition
+        setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+    } else {
+        // Close
+        sidebar.classList.add('-translate-x-full');
+
+        // Hide Overlay
+        overlay.classList.add('opacity-0');
+        setTimeout(() => overlay.classList.add('hidden'), 300);
+    }
+}
+
 // Auto-save timer
 let saveTimer = null;
 
@@ -224,7 +248,7 @@ function renderPatientsGrid(patients) {
 
     patients.forEach(p => {
         const card = document.createElement('div');
-        card.className = "bg-white rounded-2xl p-5 shadow-sm hover:shadow-lg transition-shadow border border-slate-100 cursor-pointer group relative overflow-hidden";
+        card.className = "bg-white rounded-2xl p-4 md:p-5 shadow-sm hover:shadow-lg transition-shadow border border-slate-100 cursor-pointer group relative overflow-hidden";
         card.onclick = () => openModal(p);
 
         let labBadges = '';

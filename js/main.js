@@ -362,19 +362,48 @@ function openModal(patient) {
     document.getElementById('inp-provider').value = patient.provider || '';
     document.getElementById('inp-treatment').value = patient.treatment || '';
 
-    // Parse Medications (JSON or String)
+    // 2. Parse Complex Fields (Symptoms, Labs, Meds)
+    try {
+        if (patient.symptoms && typeof patient.symptoms === 'string') {
+            patient.symptoms = JSON.parse(patient.symptoms);
+        }
+    } catch (e) { patient.symptoms = {}; }
+    if (!patient.symptoms || typeof patient.symptoms !== 'object') patient.symptoms = {};
+
+    try {
+        if (patient.labs && typeof patient.labs === 'string') {
+            patient.labs = JSON.parse(patient.labs);
+        }
+    } catch (e) { patient.labs = {}; }
+
+    // Ensure Labs is an object (not array)
+    if (!patient.labs || typeof patient.labs !== 'object' || Array.isArray(patient.labs)) patient.labs = {};
+
+    try {
+        if (patient.history_symptoms && typeof patient.history_symptoms === 'string') {
+            patient.history_symptoms = JSON.parse(patient.history_symptoms);
+        }
+    } catch (e) { /* ignore */ }
+
+    try {
+        if (patient.history_labs && typeof patient.history_labs === 'string') {
+            patient.history_labs = JSON.parse(patient.history_labs);
+        }
+    } catch (e) { /* ignore */ }
+
+    // Meds parsing for modal
     let meds = { regular: '', prn: '' };
     try {
         if (patient.medications && patient.medications.trim().startsWith('{')) {
             meds = JSON.parse(patient.medications);
         } else {
-            meds.regular = patient.medications || ''; // Legacy fallback
+            meds.regular = patient.medications || '';
         }
     } catch (e) {
-        console.warn("Error parsing meds", e);
         meds.regular = patient.medications || '';
     }
 
+    // Render Meds Inputs
     document.getElementById('inp-medications-regular').value = meds.regular || '';
     document.getElementById('inp-medications-prn').value = meds.prn || '';
 
@@ -643,65 +672,111 @@ function closeModal() {
 }
 
 function renderModalLabs(labs) {
+    const container = document.getElementById('modal-labs-grid');
+    if (!container) return;
+    container.innerHTML = '';
+
+    // Grid Layout Restoration
+    container.className = "grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2";
+
+    // Robust parsing for Labs
+    if (typeof labs === 'string') {
+        try { labs = JSON.parse(labs); } catch (e) { labs = {}; }
+    }
+    if (!labs || typeof labs !== 'object' || Array.isArray(labs)) {
+        labs = {};
+    }
+
+    // Ghost Value Logic for Labs
+    let historyLabs = {};
+    if (appData.currentPatient.history_labs) {
+        try {
+            if (typeof appData.currentPatient.history_labs === 'string') {
+                historyLabs = JSON.parse(appData.currentPatient.history_labs);
+            } else {
+                historyLabs = appData.currentPatient.history_labs;
+            }
+        } catch (e) {
+            console.warn("Failed to parse history labs", e);
+        }
+    }
+
     try {
-        const container = document.getElementById('modal-labs-list');
-        if (!container) return; // Safety
-        container.innerHTML = '';
+        // 1. Render Default Labs
+        // Merge keys from defaults and current labs to ensure we show everything
+        const allKeys = new Set([...Object.keys(appData.ranges), ...Object.keys(labs)]);
 
-        // Grid Setup: 6 cols on large screens
-        container.className = "grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2";
+        // Filter out keys that are NOT in ranges (handle Custom labs separately)
+        const standardKeys = Object.keys(appData.ranges);
 
-        const standardLabs = appData.ranges ? Object.keys(appData.ranges) : [];
+        standardKeys.forEach(key => {
+            const lData = labs[key] || { value: '', unit: '' };
+            const val = lData.value;
+            const [min, max] = appData.ranges[key];
 
-        // 1. Render Standard Labs
-        standardLabs.forEach(labName => {
-            const labData = labs[labName] || { value: '', unit: '' };
-            const val = labData.value;
-            let status = 'normal';
-            try {
-                status = val ? checkLabStatus(labName, val) : 'normal';
-            } catch (e) { console.warn("Lab check failed", e); }
+            // Ghost Value
+            let ghostVal = '';
+            if ((!val || val === '') && historyLabs[key] && historyLabs[key].value) {
+                ghostVal = historyLabs[key].value;
+            }
 
-            let colorClass = 'bg-slate-50 border-slate-200 text-slate-900';
-            if (status === 'high') colorClass = 'bg-red-50 border-red-200 text-red-700 font-bold';
-            if (status === 'low') colorClass = 'bg-orange-50 border-orange-200 text-orange-700 font-bold';
+            // Status Logic
+            let statusClass = "text-indigo-900 border-indigo-200 focus:border-indigo-500";
+            let statusIcon = "";
+
+            if (val !== '') {
+                const num = parseFloat(val);
+                if (!isNaN(num)) {
+                    if (num < min) { statusClass = "text-blue-600 border-blue-400 bg-blue-50 font-bold"; statusIcon = "↓"; }
+                    else if (num > max) { statusClass = "text-red-600 border-red-400 bg-red-50 font-bold"; statusIcon = "↑"; }
+                    else { statusClass = "text-emerald-600 border-emerald-400 bg-emerald-50"; statusIcon = "✓"; }
+                }
+            }
 
             const wrapper = document.createElement('div');
-            // Height 20 (5rem)
-            wrapper.className = `p-2 rounded-lg border ${colorClass} flex flex-col items-center justify-between text-center transition-all hover:shadow-md h-20`;
-
-            const range = appData.ranges[labName] || ['-', '-'];
+            wrapper.className = `p-2 rounded-lg border border-slate-200 bg-white flex flex-col items-center justify-between text-center transition-all hover:shadow-md h-20`;
 
             wrapper.innerHTML = `
-                <div class="flex justify-between w-full mb-1 items-start">
-                    <span class="text-xs uppercase font-black tracking-tight leading-none text-left" title="${labName}">${labName}</span>
-                    <span class="text-[10px] font-bold text-slate-500 whitespace-nowrap bg-white/50 px-1 rounded">${range[0]}-${range[1]}</span>
+                <label class="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">${key}</label>
+                <div class="relative w-full">
+                    <input type="text" value="${val}" 
+                        class="w-full text-center bg-transparent text-lg font-black focus:outline-none p-0 border-b transition-colors ${statusClass}" 
+                        placeholder="${ghostVal ? '(' + ghostVal + ')' : '-'}"
+                        onfocus="this.placeholder = ''"
+                        onblur="this.placeholder = '${ghostVal ? '(' + ghostVal + ')' : '-'}'">
+                    <span class="absolute right-0 top-1/2 -translate-y-1/2 text-[10px] font-bold ${statusClass.includes('red') ? 'text-red-500' : 'text-slate-400'}">${statusIcon}</span>
                 </div>
-                <!-- Input: Bolder, larger text -->
-                <input type="number" step="0.1" value="${val}" class="w-full text-center bg-transparent text-lg font-black focus:outline-none p-0 border-b border-transparent focus:border-indigo-400 transition-colors placeholder-slate-300" placeholder="-">
+                <span class="text-[9px] text-slate-300">${min}-${max}</span>
             `;
 
             const input = wrapper.querySelector('input');
-            input.onchange = (e) => {
-                const newVal = parseFloat(e.target.value);
+            input.oninput = (e) => {
                 if (!appData.currentPatient.labs) appData.currentPatient.labs = {};
-                if (!appData.currentPatient.labs[labName]) appData.currentPatient.labs[labName] = {};
-                appData.currentPatient.labs[labName].value = isNaN(newVal) ? '' : newVal;
+                if (!appData.currentPatient.labs[key]) appData.currentPatient.labs[key] = { value: '', unit: '' };
+                appData.currentPatient.labs[key].value = e.target.value;
 
+                // Live Validation styling update
+                // (Re-render whole block is expensive, better toggle classes here if needed, but for now triggerSave is enough)
                 triggerSave();
-                renderModalLabs(appData.currentPatient.labs);
             };
+
             container.appendChild(wrapper);
         });
 
-        // 2. Render Custom Labs (Dynamic)
-        const customKeys = Object.keys(labs).filter(k => !standardLabs.includes(k) && k !== 'Other');
+        // 2. Custom Labs
+        const customKeys = Object.keys(labs).filter(k => !standardKeys.includes(k));
 
         customKeys.forEach(key => {
             // Safety check: skip if value is null/undefined or not object
             if (!labs[key] || typeof labs[key] !== 'object') return;
 
             const val = labs[key].value || '';
+
+            // Ghost for custom labs?
+            let ghostVal = '';
+            if ((!val || val === '') && historyLabs[key] && historyLabs[key].value) {
+                ghostVal = historyLabs[key].value;
+            }
 
             const wrapper = document.createElement('div');
             wrapper.className = `p-2 rounded-lg border border-indigo-200 bg-indigo-50 flex flex-col items-center justify-between text-center transition-all hover:shadow-md h-20 relative group`;
@@ -713,7 +788,9 @@ function renderModalLabs(labs) {
                     </button>
                 </div>
                 <input type="text" value="${key}" class="text-[10px] uppercase font-black tracking-tight text-indigo-700 bg-transparent border-none focus:ring-0 p-0 w-full text-center placeholder-indigo-300 mb-0.5" placeholder="NAME">
-                <input type="text" value="${val}" class="w-full text-center bg-transparent text-lg font-black focus:outline-none p-0 border-b border-indigo-200 focus:border-indigo-500 transition-colors text-indigo-900" placeholder="Val">
+                <input type="text" value="${val}" 
+                    class="w-full text-center bg-transparent text-lg font-black focus:outline-none p-0 border-b border-indigo-200 focus:border-indigo-500 transition-colors text-indigo-900" 
+                    placeholder="${ghostVal ? '(' + ghostVal + ')' : 'Val'}">
             `;
 
             // Logic to Handle Rename and Value Change
@@ -789,6 +866,28 @@ function renderModalSymptoms(symptoms) {
     if (!container) return;
     container.innerHTML = '';
 
+    // Robust parsing
+    if (typeof symptoms === 'string') {
+        try { symptoms = JSON.parse(symptoms); } catch (e) { symptoms = {}; }
+    }
+    if (!symptoms || typeof symptoms !== 'object' || Array.isArray(symptoms)) {
+        symptoms = {};
+    }
+
+    // Ghost Value Logic
+    let historySyms = {};
+    if (appData.currentPatient.history_symptoms) {
+        try {
+            if (typeof appData.currentPatient.history_symptoms === 'string') {
+                historySyms = JSON.parse(appData.currentPatient.history_symptoms);
+            } else {
+                historySyms = appData.currentPatient.history_symptoms;
+            }
+        } catch (e) {
+            console.warn("Failed to parse history symptoms", e);
+        }
+    }
+
     const possibleSymptoms = [
         "Pain", "Fatigue (Tiredness)", "Drowsiness", "Nausea", "Vomiting",
         "Lack of Appetite", "Shortness of Breath (Dyspnea)", "Depression",
@@ -803,15 +902,25 @@ function renderModalSymptoms(symptoms) {
         const isActive = sData.active;
         const baseClass = isActive ? 'bg-rose-500 text-white shadow-md shadow-rose-200' : 'bg-white border border-slate-200 text-slate-800 hover:border-rose-300';
 
+        // Check for Ghost Value
+        let ghostHTML = '';
+        if (!isActive && historySyms[sym] && historySyms[sym].active) {
+            const histNote = historySyms[sym].note ? `: ${historySyms[sym].note}` : '';
+            ghostHTML = `<span class="text-[9px] text-slate-400 font-normal italic mt-1 block">(Yest: Active${histNote})</span>`;
+        }
+
         const btn = document.createElement('div');
-        btn.className = `${baseClass} p-2 rounded-lg transition-all duration-200 cursor-pointer flex flex-col gap-1 min-h-[4.5rem]`;
+        btn.className = `${baseClass} p-2 rounded-lg transition-all duration-200 cursor-pointer flex flex-col gap-1 min-h-[4.5rem] relative overflow-hidden`;
 
         btn.innerHTML = `
-            <div class="flex justify-between items-center w-full">
+            <div class="flex justify-between items-center w-full z-10">
                 <span class="font-bold text-xs uppercase tracking-wide select-none leading-tight">${sym}</span>
                 ${isActive ? '<i class="fa-solid fa-check text-xs"></i>' : ''}
             </div>
-            ${isActive ? `<input type="text" value="${sData.note}" placeholder="Note..." class="w-full text-[10px] bg-white/20 text-white placeholder-white/70 border-none rounded px-2 py-1 focus:ring-1 focus:ring-white/50 focus:outline-none transition-colors" onclick="event.stopPropagation()">` : ''}
+            ${isActive
+                ? `<input type="text" value="${sData.note}" placeholder="Note..." class="w-full text-[10px] bg-white/20 text-white placeholder-white/70 border-none rounded px-2 py-1 focus:ring-1 focus:ring-white/50 focus:outline-none transition-colors z-10" onclick="event.stopPropagation()">`
+                : ghostHTML
+            }
         `;
 
         btn.onclick = (e) => {
@@ -1445,6 +1554,41 @@ function calculateOpioid() {
     }
 
     document.getElementById('calc-reduction').innerText = applyReduction ? "-25%" : "0%";
+}
+
+// --------------------------------------------------------
+// DAILY ROUNDS LOGIC
+// --------------------------------------------------------
+async function triggerDailyReset() {
+    if (!confirm("⚠️ Are you sure you want to START A NEW DAY?\n\nThis will:\n1. Archive all current data to History Log.\n2. Reset Daily Symptoms & Labs for all patients.\n3. Keep Profiles & Meds intact.\n\nThis action cannot be undone from the app.")) {
+        return;
+    }
+
+    const btn = document.querySelector('button[onclick="triggerDailyReset()"]');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Processing...`;
+    btn.disabled = true;
+
+    try {
+        const res = await fetch(GAS_API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'reset_day' })
+        });
+        const json = await res.json();
+
+        if (json.status === 'success') {
+            alert(`✅ New Day Started Successfully!\n${json.archived_count} records archived.`);
+            closeSettingsModal();
+            location.reload(); // Reload to fetch clear data
+        } else {
+            throw new Error(json.error || "Unknown Error");
+        }
+
+    } catch (e) {
+        alert("❌ Error Starting New Day: " + e.message);
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
 }
 
 // Settings & Theming Logic

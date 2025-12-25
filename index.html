@@ -464,7 +464,7 @@
                     <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wide mb-3 flex items-center gap-2">
                         <i class="fa-solid fa-flask text-medical-600"></i> Critical Labs
                     </h3>
-                    <div class="flex gap-3 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-hide" id="modal-labs-list">
+                    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2" id="modal-labs-grid">
                         <!-- Lab items -->
                     </div>
                 </section>
@@ -903,13 +903,27 @@
                     </div>
                 </div>
 
-                <!-- Animations -->
-                <div class="flex justify-between items-center py-2 border-t border-slate-100">
+                <!-- Toggle Animations -->
+                <div class="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
                     <span class="text-sm font-medium text-slate-700">Enable Animations</span>
-                    <button onclick="toggleAnimations()" id="btn-anim-toggle"
+                    <button id="btn-anim-toggle" onclick="toggleAnimations()"
                         class="w-12 h-6 bg-medical-500 rounded-full relative transition-colors">
-                        <div class="absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform"></div>
+                        <div
+                            class="absolute top-1 right-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform">
+                        </div>
                     </button>
+                </div>
+
+                <!-- Daily Rounds Actions -->
+                <div class="mt-6 pt-6 border-t border-slate-100">
+                    <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Daily Workflow</h4>
+                    <button onclick="triggerDailyReset()"
+                        class="w-full py-3 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl shadow-lg shadow-slate-200 transition-all flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-calendar-day text-amber-400"></i>
+                        Start New Day
+                    </button>
+                    <p class="text-xs text-slate-400 text-center mt-2">Archives today's data and resets daily fields.
+                    </p>
                 </div>
             </div>
         </div>

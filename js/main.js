@@ -9,19 +9,27 @@ let appData = {
     wards: {},
     // Hardcoded ranges since they are static
     ranges: {
-        'WBC': [4.0, 11.0],
-        'HGB': [13.5, 17.5],
-        'PLT': [150, 450],
-        'Creatinine': [0.7, 1.3],
-        'Potassium (K)': [3.5, 5.1],
-        'Sodium (Na)': [136, 145],
-        'Chloride (Cl)': [98, 107],
-        'Calcium': [8.6, 10.3],
-        'Magnesium': [1.7, 2.2],
-        'Albumin': [3.4, 5.4],
-        'Total Bilirubin': [0.1, 1.2],
-        'CRP': [0, 10],
-        'BUN': [7, 20]
+        'Cl': [98, 107],          // Chloride
+        'K': [3.5, 5.1],          // Potassium
+        'Na': [136, 145],         // Sodium
+        'Tb': [0.1, 1.2],         // Total Bilirubin
+        'Db': [0, 0.3],           // Direct Bilirubin (Est)
+        'Alb': [3.4, 5.4],        // Albumin
+        'Mg': [1.7, 2.2],         // Magnesium
+        'Ph': [2.5, 4.5],         // Phosphorous (Est)
+        'Ca': [8.6, 10.3],        // Calcium
+        'CRP': [0, 10],           // C-reactive protein
+        'SGOT': [8, 45],          // Aspartate Amino Transferase
+        'SGPT': [7, 56],          // Alanine Amino Transferase
+        'ALP': [44, 147],         // Alkaline Phosphatase (Est)
+        'LDH': [140, 280],        // Lactate Dehydrogenase (Est)
+        'SCr': [0.7, 1.3],        // Serum Creatinine
+        'BUN': [7, 20],           // Blood Urea Nitrogen
+        'WBC': [4.0, 11.0],       // WBC
+        'RBC': [4.5, 5.5],        // RBC (Est)
+        'HGB': [13.5, 17.5],      // HGB
+        'PLT': [150, 450]         // PLT
+        // 'Other' handled dynamically
     },
     currentWard: null,
     currentPatient: null
@@ -254,10 +262,27 @@ function renderPatientsGrid(patients) {
         let labBadges = '';
         if (p.labs) {
             Object.entries(p.labs).forEach(([k, v]) => {
-                const status = checkLabStatus(k, v.value);
-                if (status !== 'normal') {
-                    const colorClass = status === 'high' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-orange-50 text-orange-600 border-orange-100';
-                    const icon = status === 'high' ? '↑' : '↓';
+                // Check if it's a standard lab
+                const isStandard = appData.ranges && appData.ranges[k];
+                const status = isStandard ? checkLabStatus(k, v.value) : 'custom';
+
+                // Show if abnormal standard lab OR if it's a custom lab with a value
+                if (status !== 'normal' && v.value) {
+                    let colorClass = '';
+                    let icon = '';
+
+                    if (status === 'high') {
+                        colorClass = 'bg-red-50 text-red-600 border-red-100';
+                        icon = '↑';
+                    } else if (status === 'low') {
+                        colorClass = 'bg-orange-50 text-orange-600 border-orange-100';
+                        icon = '↓';
+                    } else {
+                        // Custom Lab Style (Blue/Neutral)
+                        colorClass = 'bg-indigo-50 text-indigo-600 border-indigo-100';
+                        icon = '•';
+                    }
+
                     labBadges += `<span class="text-[10px] uppercase font-bold px-2 py-1 rounded-md border ${colorClass}">${k} ${v.value} ${icon}</span>`;
                 }
             });
@@ -286,18 +311,18 @@ function renderPatientsGrid(patients) {
 
             <div class="space-y-1 mb-4">
                 <div class="text-sm text-slate-600"><span class="font-medium text-slate-400 text-xs uppercase mr-1">Dx</span> ${p.diagnosis}</div>
-                <div class="text-sm text-slate-600 truncate"><span class="font-medium text-slate-400 text-xs uppercase mr-1">Rx</span> ${p.treatment}</div>
+                <div class="text-sm text-slate-600 whitespace-pre-wrap"><span class="font-medium text-slate-400 text-xs uppercase mr-1">Rx</span> ${p.treatment}</div>
             </div>
 
             ${symptomText ? `<div class="bg-rose-50/50 p-2 rounded-lg border border-rose-100 mb-2">${symptomText}</div>` : ''}
 
             <div class="flex items-center gap-2 mt-4 pt-3 border-t border-slate-50 justify-between">
                 <div class="flex items-center gap-2">
-                    <div class="w-5 h-5 rounded-full bg-indigo-100 text-indigo-500 flex items-center justify-center text-[10px]"><i class="fa-solid fa-user-doctor"></i></div>
+                    <div class="w-5 h-5 rounded-full bg-indigo-100 text-indigo-500 flex items-center justify-center text-[10px]"><i class="${getThemeIcon('doctor')}"></i></div>
                     <span class="text-xs text-slate-500 font-medium">${p.provider}</span>
                 </div>
                 <button class="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white flex items-center justify-center transition-colors btn-meds" title="View Medications">
-                    <i class="fa-solid fa-pills cursor-pointer"></i>
+                    <i class="${getThemeIcon('meds')} cursor-pointer"></i>
                 </button>
             </div>
         `;
@@ -336,18 +361,275 @@ function openModal(patient) {
     document.getElementById('inp-diagnosis').value = patient.diagnosis || '';
     document.getElementById('inp-provider').value = patient.provider || '';
     document.getElementById('inp-treatment').value = patient.treatment || '';
-    document.getElementById('inp-medications').value = patient.medications || '';
-    document.getElementById('inp-notes').value = patient.notes || '';
 
-    ['inp-diagnosis', 'inp-provider', 'inp-treatment', 'inp-medications', 'inp-notes'].forEach(id => {
+    // Parse Medications (JSON or String)
+    let meds = { regular: '', prn: '' };
+    try {
+        if (patient.medications && patient.medications.trim().startsWith('{')) {
+            meds = JSON.parse(patient.medications);
+        } else {
+            meds.regular = patient.medications || ''; // Legacy fallback
+        }
+    } catch (e) {
+        console.warn("Error parsing meds", e);
+        meds.regular = patient.medications || '';
+    }
+
+    document.getElementById('inp-medications-regular').value = meds.regular || '';
+    document.getElementById('inp-medications-prn').value = meds.prn || '';
+
+    document.getElementById('inp-notes').value = patient.notes || '';
+    ['inp-diagnosis', 'inp-provider', 'inp-treatment', 'inp-medications-regular', 'inp-medications-prn', 'inp-notes'].forEach(id => {
         document.getElementById(id).oninput = () => triggerSave();
     });
+
+    // Smart Paste for Regular Meds
+    document.getElementById('inp-medications-regular').addEventListener('paste', handleRegularPaste);
+    // Smart Paste for PRN Meds
+    document.getElementById('inp-medications-prn').addEventListener('paste', handlePrnPaste);
 
     renderModalLabs(patient.labs || {});
     renderModalSymptoms(patient.symptoms || {});
 
     modal.classList.remove('hidden');
     setTimeout(() => { panel.classList.remove('translate-x-full'); }, 10);
+}
+
+function handleRegularPaste(e) {
+    e.preventDefault();
+    const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+    const lines = pastedText.split(/\r?\n/);
+    const processedMeds = new Map();
+
+    // Regular Regex Patterns
+    const freqRegex = /\b(OD|BID|TID|QID|Q\d+H|DAILY|HS|PRN|STAT|NOW)\b/i;
+    const routeRegex = /\b(PO|IV|SC|IM|SL|PR|NG|TOP|Sub-Q|NEB)\b/i;
+
+    lines.forEach(line => {
+        if (!line.trim()) return;
+        const cols = line.split('\t');
+        if (cols.length < 3) return;
+
+        // 1. Identify Status to filter out
+        // In sample: Status in last col (Pending...) OR Col 3 'dc'
+        // Let's Search for specific negative keywords in the whole row to be safe?
+        // Or assume last column is status.
+        const fullRowStr = line.toLowerCase();
+        if (fullRowStr.includes('discontinued') || fullRowStr.includes('canceled') || fullRowStr.includes('held')) return;
+
+        // Col 3 check for 'dc'
+        if (cols[3] && cols[3].trim().toLowerCase() === 'dc') return;
+
+        // 2. Identify Columns
+        // Sample: Col 0 = Name, Col 1 = Detail (Dose Freq Route)
+        // Check if Col 1 looks like detail (contains dose/freq)
+        let nameIndex = 0;
+        let detailIndex = 1;
+
+        // Validation: Does Col 1 have Freq or Route?
+        if (!freqRegex.test(cols[1]) && !routeRegex.test(cols[1])) {
+            // Maybe shifted? Try to find the Detail column
+            for (let i = 0; i < cols.length; i++) {
+                if (freqRegex.test(cols[i]) || routeRegex.test(cols[i])) {
+                    detailIndex = i;
+                    nameIndex = i - 1; // Assume Name is before Detail
+                    break;
+                }
+            }
+        }
+
+        if (nameIndex < 0 || !cols[nameIndex]) return;
+
+        const name = cols[nameIndex].trim();
+        const details = cols[detailIndex] ? cols[detailIndex].trim() : '';
+
+        // 3. Format
+        // User wants: Name (Unique), Dose, Frequency.
+        // Details usually contains "40mg OD Sub-Q".
+        // Let's Clean Details: Keep strictly what we want? 
+        // Or just use the whole string as it usually has Dose + Freq + Route.
+        // "40mg OD PO" is perfect.
+
+        // Deduplicate
+        if (!processedMeds.has(name)) {
+            processedMeds.set(name, `${name} ${details}`);
+        }
+    });
+
+    if (processedMeds.size === 0) {
+        // Safe Paste Fallback
+        const textarea = e.target;
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const currentVal = textarea.value;
+        const insert = pastedText;
+        if (currentVal.trim() === '') textarea.value = insert;
+        else textarea.value = currentVal.substring(0, start) + insert + currentVal.substring(end);
+        triggerSave();
+        return;
+    }
+
+    const finalOutput = Array.from(processedMeds.values()).join('\n');
+
+    const textarea = e.target;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const currentVal = textarea.value;
+
+    if (currentVal.trim() === '') {
+        textarea.value = finalOutput;
+    } else {
+        textarea.value = currentVal.substring(0, start) + finalOutput + currentVal.substring(end);
+    }
+
+    triggerSave();
+}
+
+function handlePrnPaste(e) {
+    const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+
+    // Process the text
+    const lines = pastedText.split(/\r?\n/);
+    const processedMeds = new Map();
+    const now = new Date();
+    const oneDayMs = 24 * 60 * 60 * 1000;
+
+    // 1. Try to Parse
+    lines.forEach(line => {
+        if (!line.trim()) return;
+        const cols = line.split('\t');
+        if (cols.length < 5) return;
+
+        // Dynamic Parsing: Anchor on "Route"
+        let routeIndex = -1;
+        const routeRegex = /^(PO|IV|SC|IM|SL|PR|NG|TOP|SUBCUT|ORAL|RECTAL)$/i;
+
+        for (let i = 0; i < cols.length; i++) {
+            if (routeRegex.test(cols[i].trim())) {
+                routeIndex = i;
+                break;
+            }
+        }
+
+        // Fallback: look for Unit
+        if (routeIndex === -1) {
+            const unitRegex = /^(mg|mcg|g|ml|tab|cap)$/i;
+            for (let i = 0; i < cols.length; i++) {
+                if (unitRegex.test(cols[i].trim())) {
+                    routeIndex = i - 2;
+                    break;
+                }
+            }
+        }
+
+        if (routeIndex === -1 || routeIndex < 1) return;
+
+        const name = cols[routeIndex - 1].trim();
+        const route = cols[routeIndex].trim();
+        const dose = cols[routeIndex + 1] ? cols[routeIndex + 1].trim() : '';
+        const unit = cols[routeIndex + 2] ? cols[routeIndex + 2].trim() : '';
+        const indication = cols[routeIndex + 3] ? cols[routeIndex + 3].trim() : '';
+
+        let status = '';
+        let adminTimeStr = '';
+
+        // Search for Status from end
+        for (let j = cols.length - 1; j > routeIndex + 3; j--) {
+            const val = cols[j].trim().toLowerCase();
+            if (['taken', 'canceled', 'discontinued', 'pending', 'not taken'].includes(val)) {
+                status = val;
+                // Heuristic: Admin Time is usually near Status (j-1, j-2, or j-3)
+                // Look for YYYY-MM-DD pattern
+                const dateRegex = /\d{4}-\d{2}-\d{2}/;
+                if (cols[j - 1] && dateRegex.test(cols[j - 1])) adminTimeStr = cols[j - 1];
+                else if (cols[j - 2] && dateRegex.test(cols[j - 2])) adminTimeStr = cols[j - 2];
+                else if (cols[j - 3] && dateRegex.test(cols[j - 3])) adminTimeStr = cols[j - 3];
+                break;
+            }
+        }
+
+        if (status === 'canceled' || status === 'discontinued') return;
+        if (indication.toLowerCase() === 'dc') return;
+
+        // Frequency from Col 0
+        const orderDetail = cols[0] ? cols[0].trim() : '';
+        const freqMatch = orderDetail.match(/\b(Q\d+H|BID|TID|QID|DAILY|OD|QAM|QPM|PRN|ONCE|NOW|STAT)\b/i);
+        const frequency = freqMatch ? freqMatch[0].toUpperCase() : '';
+
+        // 24h Count Logic
+        let isTaken24h = false;
+        if (status === 'taken' && adminTimeStr) {
+            // Fix "16:23 PM" format
+            // Remove AM/PM if the hour is > 12, or just let Date parse try, but clean it up first.
+            let cleanTimeStr = adminTimeStr.trim();
+
+            // If it has " PM" or " AM" and also looks like "HH:MM", let's be careful.
+            // Replace "16:23 PM" -> "16:23"
+            if (/\d{2}:\d{2}\s+(PM|AM)/i.test(cleanTimeStr)) {
+                const parts = cleanTimeStr.match(/(\d{4}-\d{2}-\d{2})\s+(\d{1,2}):(\d{2})/);
+                if (parts) {
+                    const h = parseInt(parts[2]);
+                    if (h > 12) {
+                        cleanTimeStr = cleanTimeStr.replace(/\s*(PM|AM)/i, '');
+                    }
+                }
+            }
+
+            const entryTime = new Date(cleanTimeStr);
+            if (!isNaN(entryTime.getTime())) {
+                const diff = now - entryTime;
+                // 24h = 86400000 ms
+                if (diff >= 0 && diff < oneDayMs) {
+                    isTaken24h = true;
+                }
+            }
+        }
+
+        let cleanStr = `${name} ${dose} ${unit} ${route}`;
+        if (frequency) cleanStr += ` ${frequency}`;
+        if (indication && indication.toLowerCase() !== 'dc') cleanStr += ` (For: ${indication})`;
+
+        if (!processedMeds.has(name)) {
+            processedMeds.set(name, {
+                text: cleanStr,
+                count24h: isTaken24h ? 1 : 0
+            });
+        } else {
+            const data = processedMeds.get(name);
+            if (isTaken24h) {
+                data.count24h += 1;
+            }
+        }
+    });
+
+    // 2. Decide: If we found nothing smart, return to allow Default Paste
+    if (processedMeds.size === 0) {
+        return;
+    }
+
+    // 3. If matches found, Prevent Default and insert Smart Text
+    e.preventDefault();
+
+    const finalOutput = Array.from(processedMeds.values()).map(item => {
+        let str = item.text;
+        if (item.count24h > 0) {
+            str += ` [Taken ${item.count24h}x in 24h]`;
+        }
+        return str;
+    }).join('\n');
+
+    const textarea = e.target;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const currentVal = textarea.value;
+
+    if (currentVal.trim() === '') {
+        textarea.value = finalOutput;
+    } else {
+        textarea.value = currentVal.substring(0, start) + finalOutput + currentVal.substring(end);
+    }
+
+    triggerSave();
 }
 
 function closeModal() {
@@ -361,68 +643,175 @@ function closeModal() {
 }
 
 function renderModalLabs(labs) {
-    const container = document.getElementById('modal-labs-list');
-    container.innerHTML = '';
+    try {
+        const container = document.getElementById('modal-labs-list');
+        if (!container) return; // Safety
+        container.innerHTML = '';
 
-    const standardLabs = Object.keys(appData.ranges);
+        // Grid Setup: 6 cols on large screens
+        container.className = "grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2";
 
-    standardLabs.forEach(labName => {
-        const labData = labs[labName] || { value: '', unit: '' };
-        const val = labData.value;
-        const status = val ? checkLabStatus(labName, val) : 'normal';
+        const standardLabs = appData.ranges ? Object.keys(appData.ranges) : [];
 
-        let colorClass = 'bg-slate-50 border-slate-200 text-slate-700';
-        if (status === 'high') colorClass = 'bg-red-50 border-red-200 text-red-700';
-        if (status === 'low') colorClass = 'bg-orange-50 border-orange-200 text-orange-700';
+        // 1. Render Standard Labs
+        standardLabs.forEach(labName => {
+            const labData = labs[labName] || { value: '', unit: '' };
+            const val = labData.value;
+            let status = 'normal';
+            try {
+                status = val ? checkLabStatus(labName, val) : 'normal';
+            } catch (e) { console.warn("Lab check failed", e); }
 
-        const wrapper = document.createElement('div');
-        wrapper.className = `flex-shrink-0 w-32 p-3 rounded-xl border ${colorClass} flex flex-col items-center justify-center text-center`;
-        const range = appData.ranges[labName];
+            let colorClass = 'bg-slate-50 border-slate-200 text-slate-900';
+            if (status === 'high') colorClass = 'bg-red-50 border-red-200 text-red-700 font-bold';
+            if (status === 'low') colorClass = 'bg-orange-50 border-orange-200 text-orange-700 font-bold';
 
-        wrapper.innerHTML = `
-            <span class="text-[10px] font-bold uppercase tracking-wider opacity-70 mb-1">${labName}</span>
-            <input type="number" step="0.1" value="${val}" class="w-full text-center bg-transparent font-bold text-lg focus:outline-none mb-1" placeholder="--">
-            <span class="text-[9px] opacity-60">Ref: ${range[0]} - ${range[1]}</span>
+            const wrapper = document.createElement('div');
+            // Height 20 (5rem)
+            wrapper.className = `p-2 rounded-lg border ${colorClass} flex flex-col items-center justify-between text-center transition-all hover:shadow-md h-20`;
+
+            const range = appData.ranges[labName] || ['-', '-'];
+
+            wrapper.innerHTML = `
+                <div class="flex justify-between w-full mb-1 items-start">
+                    <span class="text-xs uppercase font-black tracking-tight leading-none text-left" title="${labName}">${labName}</span>
+                    <span class="text-[10px] font-bold text-slate-500 whitespace-nowrap bg-white/50 px-1 rounded">${range[0]}-${range[1]}</span>
+                </div>
+                <!-- Input: Bolder, larger text -->
+                <input type="number" step="0.1" value="${val}" class="w-full text-center bg-transparent text-lg font-black focus:outline-none p-0 border-b border-transparent focus:border-indigo-400 transition-colors placeholder-slate-300" placeholder="-">
+            `;
+
+            const input = wrapper.querySelector('input');
+            input.onchange = (e) => {
+                const newVal = parseFloat(e.target.value);
+                if (!appData.currentPatient.labs) appData.currentPatient.labs = {};
+                if (!appData.currentPatient.labs[labName]) appData.currentPatient.labs[labName] = {};
+                appData.currentPatient.labs[labName].value = isNaN(newVal) ? '' : newVal;
+
+                triggerSave();
+                renderModalLabs(appData.currentPatient.labs);
+            };
+            container.appendChild(wrapper);
+        });
+
+        // 2. Render Custom Labs (Dynamic)
+        const customKeys = Object.keys(labs).filter(k => !standardLabs.includes(k) && k !== 'Other');
+
+        customKeys.forEach(key => {
+            // Safety check: skip if value is null/undefined or not object
+            if (!labs[key] || typeof labs[key] !== 'object') return;
+
+            const val = labs[key].value || '';
+
+            const wrapper = document.createElement('div');
+            wrapper.className = `p-2 rounded-lg border border-indigo-200 bg-indigo-50 flex flex-col items-center justify-between text-center transition-all hover:shadow-md h-20 relative group`;
+
+            wrapper.innerHTML = `
+                <div class="absolute -top-2 -right-2 hidden group-hover:block z-20">
+                    <button class="bg-indigo-600 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] shadow-sm hover:scale-110 transition-transform btn-delete-lab">
+                        <i class="fa-solid fa-times"></i>
+                    </button>
+                </div>
+                <input type="text" value="${key}" class="text-[10px] uppercase font-black tracking-tight text-indigo-700 bg-transparent border-none focus:ring-0 p-0 w-full text-center placeholder-indigo-300 mb-0.5" placeholder="NAME">
+                <input type="text" value="${val}" class="w-full text-center bg-transparent text-lg font-black focus:outline-none p-0 border-b border-indigo-200 focus:border-indigo-500 transition-colors text-indigo-900" placeholder="Val">
+            `;
+
+            // Logic to Handle Rename and Value Change
+            const inputs = wrapper.querySelectorAll('input');
+            const nameInput = inputs[0];
+            const valInput = inputs[1];
+            const deleteBtn = wrapper.querySelector('.btn-delete-lab');
+
+            if (!nameInput || !valInput || !deleteBtn) {
+                console.warn("Missing elements for custom lab:", key);
+                return;
+            }
+
+            // Delete
+            deleteBtn.onclick = () => {
+                if (confirm(`Remove ${key}?`)) {
+                    delete appData.currentPatient.labs[key];
+                    triggerSave();
+                    renderModalLabs(appData.currentPatient.labs);
+                }
+            };
+
+            // Rename Key
+            nameInput.onchange = (e) => {
+                const newName = e.target.value.trim().replace(/\s+/g, '_'); // Enforce safe keys
+                if (newName && newName !== key) {
+                    if (appData.currentPatient.labs[newName]) {
+                        alert("Lab name already exists!");
+                        e.target.value = key; // Revert
+                        return;
+                    }
+                    // Start of Move
+                    appData.currentPatient.labs[newName] = appData.currentPatient.labs[key];
+                    delete appData.currentPatient.labs[key];
+                    triggerSave();
+                    renderModalLabs(appData.currentPatient.labs);
+                }
+            };
+
+            // Update Value
+            valInput.onchange = (e) => {
+                appData.currentPatient.labs[key].value = e.target.value;
+                triggerSave();
+            };
+
+            container.appendChild(wrapper);
+        });
+
+        // 3. "Add Lab" Button
+        const addBtn = document.createElement('button');
+        addBtn.className = "flex flex-col items-center justify-center p-2 rounded-lg border border-dashed border-slate-300 text-slate-400 hover:border-medical-400 hover:text-medical-600 hover:bg-slate-50 transition-all h-20";
+        addBtn.innerHTML = `
+            <i class="fa-solid fa-plus text-lg mb-1"></i>
+            <span class="text-[10px] font-bold uppercase">Add</span>
         `;
-
-        const input = wrapper.querySelector('input');
-        input.onchange = (e) => {
-            const newVal = parseFloat(e.target.value);
+        addBtn.onclick = () => {
+            const newKey = "New_Lab_" + Math.floor(Math.random() * 1000);
             if (!appData.currentPatient.labs) appData.currentPatient.labs = {};
-            if (!appData.currentPatient.labs[labName]) appData.currentPatient.labs[labName] = {};
-            appData.currentPatient.labs[labName].value = isNaN(newVal) ? '' : newVal;
-
+            appData.currentPatient.labs[newKey] = { value: '', unit: '' };
             renderModalLabs(appData.currentPatient.labs);
             triggerSave();
         };
-        container.appendChild(wrapper);
-    });
+        container.appendChild(addBtn);
+
+    } catch (err) {
+        console.error("Critical renderModalLabs error:", err);
+        alert("UI Error: " + err.message);
+    }
 }
 
 function renderModalSymptoms(symptoms) {
     const container = document.getElementById('modal-symptoms-grid');
+    if (!container) return;
     container.innerHTML = '';
 
     const possibleSymptoms = [
-        "Pain", "Fatigue", "Drowsiness", "Nausea", "Vomiting",
-        "Lack of Appetite", "Shortness of Breath", "Depression",
-        "Anxiety", "Sleep Disturbance", "Constipation", "Confusion", "Wellbeing"
+        "Pain", "Fatigue (Tiredness)", "Drowsiness", "Nausea", "Vomiting",
+        "Lack of Appetite", "Shortness of Breath (Dyspnea)", "Depression",
+        "Anxiety", "Sleep Disturbance", "Dysphagia", "Odynophagia",
+        "Constipation", "Diarrhea", "Confusion/Delirium",
+        "Peripheral Neuropathy", "Mucositis", "Wellbeing"
     ];
 
+    // 1. Render Standard Symptoms
     possibleSymptoms.forEach(sym => {
         const sData = symptoms[sym] || { active: false, note: '' };
         const isActive = sData.active;
-        const baseClass = isActive ? 'bg-rose-500 text-white shadow-md shadow-rose-200' : 'bg-white border border-slate-200 text-slate-600 hover:border-rose-300';
+        const baseClass = isActive ? 'bg-rose-500 text-white shadow-md shadow-rose-200' : 'bg-white border border-slate-200 text-slate-800 hover:border-rose-300';
 
         const btn = document.createElement('div');
-        btn.className = `${baseClass} p-3 rounded-xl transition-all duration-200 cursor-pointer flex flex-col gap-2`;
+        btn.className = `${baseClass} p-2 rounded-lg transition-all duration-200 cursor-pointer flex flex-col gap-1 min-h-[4.5rem]`;
 
         btn.innerHTML = `
             <div class="flex justify-between items-center w-full">
-                <span class="font-medium text-sm select-none">${sym}</span>
+                <span class="font-bold text-xs uppercase tracking-wide select-none leading-tight">${sym}</span>
                 ${isActive ? '<i class="fa-solid fa-check text-xs"></i>' : ''}
             </div>
-            ${isActive ? `<input type="text" value="${sData.note}" placeholder="Note..." class="w-full text-xs bg-white/20 text-white placeholder-white/70 border-none rounded px-2 py-1 focus:ring-1 focus:ring-white/50 focus:outline-none" onclick="event.stopPropagation()">` : ''}
+            ${isActive ? `<input type="text" value="${sData.note}" placeholder="Note..." class="w-full text-[10px] bg-white/20 text-white placeholder-white/70 border-none rounded px-2 py-1 focus:ring-1 focus:ring-white/50 focus:outline-none transition-colors" onclick="event.stopPropagation()">` : ''}
         `;
 
         btn.onclick = (e) => {
@@ -445,6 +834,101 @@ function renderModalSymptoms(symptoms) {
         }
         container.appendChild(btn);
     });
+
+    // 2. Render Custom Symptoms
+    if (!symptoms) symptoms = {};
+    const customKeys = Object.keys(symptoms).filter(k => !possibleSymptoms.includes(k));
+
+    customKeys.forEach(key => {
+        const sData = symptoms[key];
+        const isActive = sData.active; // Allow toggling
+
+        // Match standard styles
+        const baseClass = isActive ? 'bg-rose-500 text-white shadow-md shadow-rose-200' : 'bg-white border border-slate-200 text-slate-800 hover:border-rose-300';
+        const inputNameClass = isActive ? 'text-white placeholder-white/60' : 'text-slate-900 placeholder-slate-400 font-bold';
+        const inputNoteClass = isActive ? 'bg-white/20 text-white placeholder-white/70' : 'bg-slate-50 text-slate-700 border border-slate-200 placeholder-slate-400';
+
+        const btn = document.createElement('div');
+        btn.className = `${baseClass} p-2 rounded-lg transition-all duration-200 cursor-pointer flex flex-col gap-1 relative group min-h-[4.5rem]`;
+
+        btn.innerHTML = `
+            <div class="absolute -top-2 -right-2 hidden group-hover:block z-10">
+                <button class="bg-slate-800 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] shadow-md hover:bg-red-600 transition-colors btn-delete-sym">
+                    <i class="fa-solid fa-times"></i>
+                </button>
+            </div>
+            <div class="flex justify-between items-center w-full">
+                <input type="text" value="${key}" class="font-bold text-xs uppercase tracking-wide bg-transparent border-none p-0 focus:ring-0 w-full ${inputNameClass} transition-colors" placeholder="SYMPTOM NAME" onclick="event.stopPropagation()">
+                ${isActive ? '<i class="fa-solid fa-check text-xs"></i>' : '<i class="fa-solid fa-pen text-[9px] opacity-20"></i>'}
+            </div>
+            ${isActive ? `<input type="text" value="${sData.note || ''}" placeholder="Note..." class="w-full text-[10px] border-none rounded px-2 py-1 focus:ring-1 focus:ring-white/50 focus:outline-none ${inputNoteClass}" onclick="event.stopPropagation()">` : ''}
+        `;
+
+        // Logic
+        const nameInput = btn.querySelector('input[type="text"]:first-child');
+        const noteInput = btn.querySelector('input[type="text"]:last-child');
+        const deleteBtn = btn.querySelector('.btn-delete-sym');
+
+        // Toggle Active Logic (Container Click)
+        btn.onclick = (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.closest('button')) return;
+            appData.currentPatient.symptoms[key].active = !appData.currentPatient.symptoms[key].active;
+            renderModalSymptoms(appData.currentPatient.symptoms);
+            triggerSave();
+        };
+
+        deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            if (confirm(`Delete symptom '${key}'?`)) {
+                delete appData.currentPatient.symptoms[key];
+                triggerSave();
+                renderModalSymptoms(appData.currentPatient.symptoms);
+            }
+        };
+
+        nameInput.onchange = (e) => {
+            const newName = e.target.value.trim();
+            if (newName && newName !== key) {
+                if (appData.currentPatient.symptoms[newName]) {
+                    alert("Symptom already exists!");
+                    e.target.value = key;
+                    return;
+                }
+                // Preserve active state and note
+                const currentData = appData.currentPatient.symptoms[key];
+                appData.currentPatient.symptoms[newName] = currentData;
+                delete appData.currentPatient.symptoms[key];
+                triggerSave();
+                renderModalSymptoms(appData.currentPatient.symptoms);
+            }
+        };
+
+        if (noteInput && isActive) {
+            noteInput.oninput = (e) => {
+                appData.currentPatient.symptoms[key].note = e.target.value;
+                triggerSave();
+            };
+        }
+
+        container.appendChild(btn);
+    });
+
+    // 3. Add Symptom Button
+    const addBtn = document.createElement('div');
+    addBtn.className = "border-2 border-dashed border-slate-300 rounded-lg p-2 flex flex-col items-center justify-center cursor-pointer hover:border-medical-400 hover:bg-slate-50 transition-colors min-h-[4.5rem] text-slate-400 hover:text-medical-600";
+    addBtn.innerHTML = `
+        <i class="fa-solid fa-plus text-lg mb-1"></i>
+        <span class="text-[10px] font-bold uppercase">Add</span>
+    `;
+    addBtn.onclick = () => {
+        const newKey = "New_Symptom_" + Math.floor(Math.random() * 1000);
+        if (!appData.currentPatient.symptoms) appData.currentPatient.symptoms = {};
+        appData.currentPatient.symptoms[newKey] = { active: true, note: '' };
+        renderModalSymptoms(appData.currentPatient.symptoms);
+        triggerSave();
+    };
+    container.appendChild(addBtn);
+
 }
 
 function triggerSave() {
@@ -455,7 +939,14 @@ function triggerSave() {
         appData.currentPatient.diagnosis = document.getElementById('inp-diagnosis').value;
         appData.currentPatient.provider = document.getElementById('inp-provider').value;
         appData.currentPatient.treatment = document.getElementById('inp-treatment').value;
-        appData.currentPatient.medications = document.getElementById('inp-medications').value;
+
+        // Save Medications as JSON
+        const medsObj = {
+            regular: document.getElementById('inp-medications-regular').value,
+            prn: document.getElementById('inp-medications-prn').value
+        };
+        appData.currentPatient.medications = JSON.stringify(medsObj);
+
         appData.currentPatient.notes = document.getElementById('inp-notes').value;
     }
 
@@ -523,6 +1014,7 @@ function closeImportModal() {
 function handleFileSelect(event) {
     const file = event.target.files[0];
     if (!file) return;
+
 
     if (file.name.endsWith('.csv')) {
         Papa.parse(file, {
@@ -766,33 +1258,128 @@ async function startImport() {
 // Medication Quick View Logic
 function openMedicationModal(patient) {
     const modal = document.getElementById('medication-modal');
-    const listContainer = document.getElementById('medication-list-content');
-    const noMedsMsg = document.getElementById('no-meds-msg');
 
-    document.getElementById('med-modal-patient-name').innerText = patient.name;
-    listContainer.innerHTML = '';
+    // Elements
+    const listRegular = document.getElementById('medication-list-regular');
+    const listPrn = document.getElementById('medication-list-prn');
+    // Updated IDs to match new Wide Modal HTML
+    const noRegMsg = document.getElementById('no-reg-meds-msg');
+    const noPrnMsg = document.getElementById('no-prn-meds-msg');
 
-    if (!patient.medications || patient.medications.trim() === '') {
-        noMedsMsg.classList.remove('hidden');
-    } else {
-        noMedsMsg.classList.add('hidden');
-        // Split by newlines or commas
-        const meds = patient.medications.split(/\n|,/);
-        meds.forEach(med => {
-            const m = med.trim();
-            if (m) {
-                const li = document.createElement('li');
-                li.className = "flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100";
-                li.innerHTML = `
-                    <div class="mt-1 w-2 h-2 rounded-full bg-indigo-400 flex-shrink-0"></div>
-                    <span class="text-sm text-slate-700 font-medium leading-relaxed">${m}</span>
-                `;
-                listContainer.appendChild(li);
-            }
-        });
+    const nameEl = document.getElementById('med-modal-patient-name');
+    if (nameEl) nameEl.innerText = patient.name;
+
+    listRegular.innerHTML = '';
+    listPrn.innerHTML = '';
+
+    // Parse Data
+    let meds = { regular: '', prn: '' };
+    try {
+        if (patient.medications && patient.medications.trim().startsWith('{')) {
+            meds = JSON.parse(patient.medications);
+        } else {
+            meds.regular = patient.medications || '';
+        }
+    } catch (e) {
+        meds.regular = patient.medications || '';
     }
 
+    // Helper to render list
+    // Helper to render list
+    const renderList = (text) => {
+        if (!text) return '<p class="text-gray-400 text-sm italic">None</p>';
+        return text.split('\n').filter(t => t.trim()).map(item => {
+            // Extract [Taken Nx...] if present
+            const takenMatch = item.match(/\[Taken\s+(\d+x)\s+in\s+24h\]/i);
+            const isTaken = !!takenMatch;
+            let displayText = item;
+            let takenBadge = '';
+
+            if (isTaken) {
+                // Remove the raw tag from text to display it separately
+                displayText = item.replace(takenMatch[0], '').trim();
+                const count = takenMatch[1]; // e.g., "4x"
+
+                // Create a prominent badge
+                takenBadge = `
+                    <div class="flex items-center gap-1 bg-white/80 border border-red-200 px-2 py-1 rounded-md shadow-sm ml-2">
+                        <i class="fas fa-history text-red-500 text-xs"></i>
+                        <span class="text-red-600 font-bold text-xs uppercase tracking-wider">${count} in 24h</span>
+                    </div>
+                `;
+            }
+
+            // Base classes
+            let classes = "p-3 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-2 transition-all";
+            let dotClass = "w-2 h-2 rounded-full mt-1.5 sm:mt-0 flex-shrink-0";
+
+            if (isTaken) {
+                classes += " bg-red-50 border-red-200 text-gray-800 shadow-sm";
+                dotClass += " bg-red-500 animate-pulse";
+            } else {
+                classes += " bg-slate-50 border-slate-100 text-gray-600";
+                dotClass += " bg-indigo-400";
+            }
+
+            return `
+            <li class="${classes}">
+                <div class="flex items-start sm:items-center gap-2 flex-1">
+                    <div class="${dotClass}"></div>
+                    <span class="text-sm leading-relaxed font-medium">${displayText}</span>
+                </div>
+                ${takenBadge}
+            </li>`;
+        }).join('');
+    };
+
+    document.getElementById('medication-list-regular').innerHTML = `<ul class="space-y-2">${renderList(meds.regular)}</ul>`;
+    document.getElementById('medication-list-prn').innerHTML = `<ul class="space-y-2">${renderList(meds.prn)}</ul>`;
+
+    // Hide/show empty messages based on content
+    if (meds.regular && meds.regular.trim() !== '') {
+        noRegMsg.classList.add('hidden');
+    } else {
+        noRegMsg.classList.remove('hidden');
+    }
+
+    if (meds.prn && meds.prn.trim() !== '') {
+        noPrnMsg.classList.add('hidden');
+    } else {
+        noPrnMsg.classList.remove('hidden');
+    }
+
+    // Default to 'Regular' tab on mobile
+    switchMedTab('regular');
     modal.classList.remove('hidden');
+}
+
+function switchMedTab(tab) {
+    const btnReg = document.getElementById('tab-btn-regular');
+    const btnPrn = document.getElementById('tab-btn-prn');
+    const colReg = document.getElementById('med-col-regular');
+    const colPrn = document.getElementById('med-col-prn');
+
+    // Reset Styles
+    const activeBtnClass = "text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50";
+    const inactiveBtnClass = "text-slate-500 hover:bg-slate-50";
+
+    if (tab === 'regular') {
+        // Show Regular, Hide PRN (on mobile)
+        colReg.classList.remove('hidden');
+        colPrn.classList.add('hidden');
+
+        // Update Buttons
+        btnReg.className = "flex-1 py-3 text-sm font-bold transition-colors " + activeBtnClass;
+        btnPrn.className = "flex-1 py-3 text-sm font-bold transition-colors " + inactiveBtnClass;
+    } else {
+        // Show PRN, Hide Regular (on mobile)
+        colReg.classList.add('hidden');
+        colPrn.classList.remove('hidden');
+
+        // Update Buttons
+        btnReg.className = "flex-1 py-3 text-sm font-bold transition-colors " + inactiveBtnClass;
+        btnPrn.className = "flex-1 py-3 text-sm font-bold transition-colors " + activeBtnClass;
+    }
 }
 
 function closeMedicationModal() {
@@ -975,21 +1562,180 @@ function applyAnimations(enabled) {
     }
 }
 
+// --- 5 Immersive Design System Logic ---
+
+// Icon Mappings for Themes
+const THEME_ICONS = {
+    'default': { doctor: 'fa-solid fa-user-doctor', meds: 'fa-solid fa-pills' },
+    'clay': { doctor: 'fa-solid fa-user-nurse', meds: 'fa-solid fa-tablets' },
+    'neon': { doctor: 'fa-solid fa-robot', meds: 'fa-solid fa-capsules' },
+    'brutal': { doctor: 'fa-solid fa-user-astronaut', meds: 'fa-solid fa-prescription-bottle' },
+    'zen': { doctor: 'fa-solid fa-seedling', meds: 'fa-solid fa-leaf' },
+    'glass': { doctor: 'fa-solid fa-user-md', meds: 'fa-solid fa-flask' }
+};
+
+function getThemeIcon(iconType) {
+    const design = currentSettings.design || 'default';
+    const themeSet = THEME_ICONS[design] || THEME_ICONS['default'];
+    return themeSet[iconType] || '';
+}
+
 function setDesign(mode) {
     currentSettings.design = mode;
     localStorage.setItem('app_design', mode);
     applyDesign(mode);
     updateSettingsUI();
+    renderPatientsGrid(appData.patients); // Re-render for icon changes
 }
 
 function applyDesign(mode) {
-    // Remove all design classes first
-    document.body.classList.remove('design-glass', 'design-minimal');
+    // Remove all design classes
+    document.body.classList.remove('design-glass', 'design-minimal', 'design-clay', 'design-neon', 'design-brutal', 'design-zen');
 
-    // Add active class if not default
-    if (mode === 'glass') {
-        document.body.classList.add('design-glass');
-    } else if (mode === 'minimal') {
-        document.body.classList.add('design-minimal');
+    // Add active class
+    if (mode && mode !== 'default') {
+        document.body.classList.add(`design-${mode}`);
+    }
+}
+
+// --- Print Medications Feature ---
+function printMedications() {
+    // 1. Collect Data by Ward
+    const wardsToPrint = {};
+    if (Object.keys(appData.wards).length === 0) {
+        alert("No patient data available to print.");
+        return;
+    }
+
+    Object.keys(appData.wards).forEach(wardName => {
+        const patients = appData.wards[wardName];
+        if (patients && patients.length > 0) {
+            wardsToPrint[wardName] = patients;
+        }
+    });
+
+    if (Object.keys(wardsToPrint).length === 0) {
+        alert("No patients found in any ward.");
+        return;
+    }
+
+    // 2. Generate HTML
+    let printContent = `
+        <html>
+        <head>
+            <title>Medication Rounding List - ${new Date().toLocaleDateString()}</title>
+            <link rel="stylesheet" href="print_styles.css?v=${Date.now()}">
+            <style>
+                @media print {
+                    @page { size: A4; margin: 1cm; }
+                    body { font-family: sans-serif; -webkit-print-color-adjust: exact; }
+                    .page-break { page-break-before: always; }
+                    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 11px; }
+                    th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; vertical-align: top; }
+                    th { background-color: #f1f5f9; font-weight: bold; color: #334155; }
+                    .ward-header { 
+                        margin-top: 0; 
+                        border-bottom: 2px solid #0ea5e9; 
+                        margin-bottom: 15px; 
+                        padding-bottom: 5px; 
+                        color: #0ea5e9; 
+                        font-size: 20px; 
+                        font-weight: bold; 
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: baseline;
+                    }
+                    .meta-info { font-size: 10px; color: #64748b; font-weight: normal; }
+                    .patient-cell { width: 20%; font-weight: bold; color: #1e293b; }
+                    .reg-cell { width: 40%; }
+                    .prn-cell { width: 40%; }
+                    ul { margin: 0; padding-left: 15px; list-style-type: square; }
+                    li { margin-bottom: 2px; }
+                    .empty-note { color: #cbd5e1; font-style: italic; font-size: 10px; }
+                    tr:nth-child(even) { background-color: #f8fafc; }
+                }
+            </style>
+        </head>
+        <body>
+    `;
+
+    const wardNames = Object.keys(wardsToPrint);
+    wardNames.forEach((ward, index) => {
+        if (index > 0) printContent += '<div class="page-break"></div>';
+
+        printContent += `
+            <div class="ward-header">
+                ${ward}
+                <span class="meta-info">Printed: ${new Date().toLocaleString()}</span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 25%">Patient</th>
+                        <th style="width: 37.5%">Regular Medications</th>
+                        <th style="width: 37.5%">PRN Medications</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        wardsToPrint[ward].forEach(p => {
+            // Parse Meds
+            let regularMeds = [];
+            let prnMeds = [];
+
+            try {
+                if (p.medications && p.medications.trim().startsWith('{')) {
+                    const obj = JSON.parse(p.medications);
+                    if (obj.regular) regularMeds = obj.regular.split(/\n|,/).filter(m => m.trim());
+                    if (obj.prn) prnMeds = obj.prn.split(/\n|,/).filter(m => m.trim());
+                } else if (p.medications) {
+                    regularMeds = p.medications.split(/\n|,/).filter(m => m.trim());
+                }
+            } catch (e) {
+                if (p.medications) regularMeds = [p.medications];
+            }
+
+            const formatList = (list) => {
+                if (!list || list.length === 0) return '<span class="empty-note">- None -</span>';
+                return `<ul>${list.map(m => `<li>${m.trim()}</li>`).join('')}</ul>`;
+            };
+
+            printContent += `
+                <tr>
+                    <td class="patient-cell">
+                        ${p.name}<br>
+                        <span style="font-weight:normal; font-size:10px; color:#64748b">
+                            ID: ${p.code} | Age: ${parseInt(p.age)}<br>
+                            Room: ${p.room}
+                        </span>
+                    </td>
+                    <td class="reg-cell">${formatList(regularMeds)}</td>
+                    <td class="prn-cell">${formatList(prnMeds)}</td>
+                </tr>
+            `;
+        });
+
+        printContent += `
+                </tbody>
+            </table>
+        `;
+    });
+
+    printContent += `
+        </body>
+        </html>
+    `;
+
+    // 3. Open Print Window
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+        setTimeout(() => {
+            printWindow.print();
+        }, 500);
+    } else {
+        alert("Pop-up blocked! Please allow pop-ups to print.");
     }
 }

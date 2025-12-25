@@ -1,0 +1,14 @@
+@media print {
+    @page { size: A4; margin: 1cm; }
+    body { font-family: sans-serif; -webkit-print-color-adjust: exact; }
+    .page-break { page-break-before: always; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: top; }
+    th { background-color: #f3f4f6; font-weight: bold; }
+    h1 { font-size: 18px; margin-bottom: 5px; color: #1e293b; }
+    h2 { font-size: 14px; margin-bottom: 10px; color: #64748b; font-weight: normal; }
+    .ward-header { margin-top: 0; padding-top: 20px; border-bottom: 2px solid #0ea5e9; margin-bottom: 15px; padding-bottom: 5px; color: #0ea5e9; font-size: 20px; font-weight: bold; }
+    .empty-msg { color: #94a3b8; font-style: italic; }
+    ul { margin: 0; padding-left: 15px; }
+    li { margin-bottom: 2px; }
+}

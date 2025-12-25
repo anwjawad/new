@@ -9,6 +9,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- App Icon -->
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🩺</text></svg>">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
@@ -62,6 +66,138 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #94a3b8;
         }
+
+        /* Theming Constants */
+        :root {
+            --color-primary: #0ea5e9;
+            /* medical-500 */
+            --color-primary-dark: #0284c7;
+            /* medical-600 */
+            --bg-body: #f3f4f6;
+            --bg-card: #ffffff;
+        }
+
+        body.theme-dark {
+            --bg-body: #0f172a;
+            --bg-card: #1e293b;
+            color: #e2e8f0;
+        }
+
+        body.theme-dark .bg-white {
+            background-color: var(--bg-card) !important;
+            color: #e2e8f0;
+            border-color: #334155 !important;
+        }
+
+        body.theme-dark .bg-slate-50 {
+            background-color: #0f172a !important;
+            color: #cbd5e1;
+            border-color: #334155 !important;
+        }
+
+        body.theme-dark .text-slate-800 {
+            color: #f8fafc !important;
+        }
+
+        body.theme-dark .text-slate-700 {
+            color: #e2e8f0 !important;
+        }
+
+        body.theme-dark .text-slate-600 {
+            color: #cbd5e1 !important;
+        }
+
+        body.theme-dark input,
+        body.theme-dark select,
+        body.theme-dark textarea {
+            background-color: #1e293b !important;
+            color: white !important;
+            border-color: #475569 !important;
+        }
+
+        /* Animation Toggle */
+        body.no-animations * {
+            transition: none !important;
+            animation: none !important;
+        }
+
+        /* --- Design Systems --- */
+
+        /* 1. Glassmorphism */
+        body.design-glass {
+            background: linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 100%) fixed !important;
+            /* Subtle mesh gradient could be added here */
+        }
+
+        body.design-glass .bg-white,
+        body.design-glass .bg-slate-50,
+        body.design-glass .bg-teal-50,
+        body.design-glass .bg-indigo-50,
+        body.design-glass .bg-rose-50 {
+            background-color: rgba(255, 255, 255, 0.65) !important;
+            backdrop-filter: blur(16px) !important;
+            -webkit-backdrop-filter: blur(16px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.4) !important;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07) !important;
+        }
+
+        body.design-glass .rounded-2xl,
+        body.design-glass .rounded-xl,
+        body.design-glass .rounded-lg {
+            border-radius: 24px !important;
+            /* Extra rounded */
+        }
+
+        /* Dark Glass */
+        body.theme-dark.design-glass {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) fixed !important;
+        }
+
+        body.theme-dark.design-glass .bg-white,
+        body.theme-dark.design-glass .bg-slate-50 {
+            background-color: rgba(30, 41, 59, 0.6) !important;
+            /* Slate-800 with alpha */
+            border: 1px solid rgba(255, 255, 255, 0.05) !important;
+            color: #e2e8f0;
+        }
+
+        /* 2. Minimal / Sharp */
+        body.design-minimal {
+            background-color: #f8fafc !important;
+        }
+
+        body.theme-dark.design-minimal {
+            background-color: #020617 !important;
+        }
+
+        body.design-minimal .rounded-2xl,
+        body.design-minimal .rounded-xl,
+        body.design-minimal .rounded-lg,
+        body.design-minimal .rounded-full,
+        body.design-minimal .rounded-md {
+            border-radius: 0px !important;
+            /* Square everything */
+        }
+
+        body.design-minimal .shadow-sm,
+        body.design-minimal .shadow-md,
+        body.design-minimal .shadow-lg,
+        body.design-minimal .shadow-2xl {
+            box-shadow: none !important;
+            /* Flat */
+            border: 1px solid #cbd5e1 !important;
+            /* Hard border */
+        }
+
+        body.design-minimal button {
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+
+        body.theme-dark.design-minimal .shadow-sm {
+            border-color: #334155 !important;
+        }
     </style>
     <script>
         tailwind.config = {
@@ -71,8 +207,8 @@
                         medical: {
                             50: '#f0f9ff',
                             100: '#e0f2fe',
-                            500: '#0ea5e9',
-                            600: '#0284c7',
+                            500: 'var(--color-primary)',
+                            600: 'var(--color-primary-dark)',
                             800: '#075985',
                             900: '#0c4a6e',
                         },
@@ -101,10 +237,10 @@
                     class="text-xs font-normal text-slate-500 ml-2 hidden sm:inline">v1.1</span></h1>
         </div>
         <div class="flex items-center gap-4">
-            <button class="p-2 text-slate-400 hover:text-medical-600 transition-colors"><i
-                    class="fa-solid fa-calculator"></i></button>
-            <button class="p-2 text-slate-400 hover:text-medical-600 transition-colors"><i
-                    class="fa-solid fa-gear"></i></button>
+            <button onclick="openCalculatorModal()" class="p-2 text-slate-400 hover:text-medical-600 transition-colors"
+                title="Opioid Calculator"><i class="fa-solid fa-calculator"></i></button>
+            <button onclick="openSettingsModal()" class="p-2 text-slate-400 hover:text-medical-600 transition-colors"
+                title="Settings"><i class="fa-solid fa-gear"></i></button>
             <div
                 class="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold text-sm">
                 DR</div>
@@ -345,6 +481,201 @@
                 <button onclick="startImport()" id="btn-start-import"
                     class="px-4 py-2 bg-slate-300 text-white font-bold text-sm rounded-lg cursor-not-allowed"
                     disabled>Start Import</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Medication Quick View Modal -->
+    <div id="medication-modal" class="fixed inset-0 z-[60] hidden">
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onclick="closeMedicationModal()"></div>
+        <div
+            class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden m-4">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
+                <h3 class="font-bold text-lg text-indigo-900"><i
+                        class="fa-solid fa-pills mr-2 text-indigo-500"></i>Medications</h3>
+                <button onclick="closeMedicationModal()"
+                    class="w-8 h-8 rounded-full bg-indigo-100 hover:bg-indigo-200 flex items-center justify-center text-indigo-700 transition-colors">
+                    <i class="fa-solid fa-times"></i>
+                </button>
+            </div>
+            <div class="p-6 max-h-[70vh] overflow-y-auto">
+                <div id="med-modal-patient-name"
+                    class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">
+                    Patient Name</div>
+                <ul id="medication-list-content" class="space-y-3">
+                    <!-- List items injected here -->
+                </ul>
+                <div id="no-meds-msg" class="hidden text-center text-slate-400 py-4 italic">No medications listed</div>
+            </div>
+        </div>
+    </div>
+
+    </div>
+    </div>
+
+    <!-- Opioid Calculator Modal -->
+    <div id="calculator-modal" class="fixed inset-0 z-[60] hidden">
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onclick="closeCalculatorModal()"></div>
+        <div
+            class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden m-4">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-teal-50">
+                <h3 class="font-bold text-lg text-teal-900"><i
+                        class="fa-solid fa-calculator mr-2 text-teal-500"></i>Opioid Converter</h3>
+                <button onclick="closeCalculatorModal()" class="text-teal-700 hover:text-teal-900"><i
+                        class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">From Drug</label>
+                        <select id="calc-from-drug"
+                            class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500">
+                            <option value="morphine">Morphine</option>
+                            <option value="oxycodone">Oxycodone</option>
+                            <option value="hydromorphone">Hydromorphone</option>
+                            <option value="fentanyl_td">Fentanyl Patch (mcg/hr)</option>
+                            <option value="codeine">Codeine</option>
+                            <option value="tramadol">Tramadol</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Route</label>
+                        <select id="calc-from-route"
+                            class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500">
+                            <option value="po">PO (Oral)</option>
+                            <option value="iv">IV/SC</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Daily Dose (mg/day)</label>
+                    <input type="number" id="calc-dose"
+                        class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-lg font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        placeholder="0">
+                </div>
+
+                <div class="flex justify-center text-slate-300"><i class="fa-solid fa-arrow-down"></i></div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">To Drug</label>
+                        <select id="calc-to-drug"
+                            class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500">
+                            <option value="morphine">Morphine</option>
+                            <option value="oxycodone">Oxycodone</option>
+                            <option value="hydromorphone">Hydromorphone</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Route</label>
+                        <select id="calc-to-route"
+                            class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500">
+                            <option value="po">PO (Oral)</option>
+                            <option value="iv">IV/SC</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="bg-teal-50 p-4 rounded-xl border border-teal-100 text-center">
+                    <div class="text-xs text-teal-600 font-bold uppercase mb-1">Equianalgesic Dose</div>
+                    <div id="calc-result" class="text-2xl font-bold text-teal-800">0 mg</div>
+                    <div class="text-[10px] text-teal-500 mt-1">
+                        Cross-tolerance: <span id="calc-reduction">0%</span> reduction applied?
+                        <input type="checkbox" id="calc-apply-reduction" class="ml-1" checked> (Recommend -25%)
+                    </div>
+                </div>
+
+                <button onclick="calculateOpioid()"
+                    class="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl transition-colors shadow-lg shadow-teal-200">Calculate</button>
+            </div>
+        </div>
+    </div>
+
+    </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 z-[70] hidden">
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onclick="closeSettingsModal()"></div>
+        <div
+            class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden m-4">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 class="font-bold text-lg text-slate-800"><i
+                        class="fa-solid fa-gear mr-2 text-slate-400"></i>Settings</h3>
+                <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-slate-600"><i
+                        class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="p-6 space-y-6">
+                <!-- Design System -->
+                <div>
+                    <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Design Style</h4>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button onclick="setDesign('default')"
+                            class="p-2 border border-slate-200 hover:border-medical-500 rounded-lg flex flex-col items-center gap-1 transition-colors design-btn"
+                            data-design="default">
+                            <div class="w-full h-8 bg-slate-100 rounded-md border border-slate-200"></div>
+                            <span class="text-[10px] font-bold text-slate-500">Soft</span>
+                        </button>
+                        <button onclick="setDesign('glass')"
+                            class="p-2 border border-slate-200 hover:border-medical-500 rounded-lg flex flex-col items-center gap-1 transition-colors design-btn"
+                            data-design="glass">
+                            <div
+                                class="w-full h-8 bg-gradient-to-br from-indigo-100 to-white rounded-xl border border-indigo-50 shadow-sm">
+                            </div>
+                            <span class="text-[10px] font-bold text-slate-500">Glass</span>
+                        </button>
+                        <button onclick="setDesign('minimal')"
+                            class="p-2 border border-slate-200 hover:border-medical-500 rounded-lg flex flex-col items-center gap-1 transition-colors design-btn"
+                            data-design="minimal">
+                            <div class="w-full h-8 bg-white border-2 border-slate-800"></div>
+                            <span class="text-[10px] font-bold text-slate-500">Sharp</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Theme Mode -->
+                <div>
+                    <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Appearance</h4>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="setTheme('light')"
+                            class="p-3 rounded-xl border border-slate-200 hover:border-medical-500 transition-colors flex flex-col items-center gap-2 group theme-btn"
+                            data-theme="light">
+                            <i class="fa-solid fa-sun text-xl text-amber-500"></i>
+                            <span class="text-sm font-medium text-slate-600">Light</span>
+                        </button>
+                        <button onclick="setTheme('dark')"
+                            class="p-3 rounded-xl border border-slate-200 hover:border-medical-500 transition-colors flex flex-col items-center gap-2 group theme-btn"
+                            data-theme="dark">
+                            <i class="fa-solid fa-moon text-xl text-indigo-400"></i>
+                            <span class="text-sm font-medium text-slate-600">Dark</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Accent Color -->
+                <div>
+                    <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Accent Color</h4>
+                    <div class="flex gap-3 justify-center">
+                        <button onclick="setAccent('blue')"
+                            class="w-10 h-10 rounded-full bg-blue-500 hover:scale-110 transition-transform ring-2 ring-transparent focus:ring-offset-2 focus:ring-blue-500"></button>
+                        <button onclick="setAccent('teal')"
+                            class="w-10 h-10 rounded-full bg-teal-500 hover:scale-110 transition-transform ring-2 ring-transparent focus:ring-offset-2 focus:ring-teal-500"></button>
+                        <button onclick="setAccent('rose')"
+                            class="w-10 h-10 rounded-full bg-rose-500 hover:scale-110 transition-transform ring-2 ring-transparent focus:ring-offset-2 focus:ring-rose-500"></button>
+                        <button onclick="setAccent('indigo')"
+                            class="w-10 h-10 rounded-full bg-indigo-500 hover:scale-110 transition-transform ring-2 ring-transparent focus:ring-offset-2 focus:ring-indigo-500"></button>
+                    </div>
+                </div>
+
+                <!-- Animations -->
+                <div class="flex justify-between items-center py-2 border-t border-slate-100">
+                    <span class="text-sm font-medium text-slate-700">Enable Animations</span>
+                    <button onclick="toggleAnimations()" id="btn-anim-toggle"
+                        class="w-12 h-6 bg-medical-500 rounded-full relative transition-colors">
+                        <div class="absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform"></div>
+                    </button>
+                </div>
             </div>
         </div>
     </div>

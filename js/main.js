@@ -276,7 +276,7 @@ function renderPatientsGrid(patients) {
         card.innerHTML = `
             <div class="flex justify-between items-start mb-3">
                 <div>
-                     <h3 class="font-bold text-lg text-slate-800 group-hover:text-medical-600 transition-colors">${p.name}</h3>
+                     <h3 class="font-bold text-lg text-slate-800 group-hover:text-medical-600 transition-colors">${p.name} <span class="text-xs font-normal text-slate-400 ml-1">(${parseInt(p.age)})</span></h3>
                      <div class="text-xs text-slate-400 font-mono">${p.code}</div>
                 </div>
                 <div class="bg-slate-100 text-slate-500 text-xs font-bold px-2 py-1 rounded-lg">RM ${p.room}</div>
@@ -291,11 +291,26 @@ function renderPatientsGrid(patients) {
 
             ${symptomText ? `<div class="bg-rose-50/50 p-2 rounded-lg border border-rose-100 mb-2">${symptomText}</div>` : ''}
 
-            <div class="flex items-center gap-2 mt-4 pt-3 border-t border-slate-50">
-                <div class="w-5 h-5 rounded-full bg-indigo-100 text-indigo-500 flex items-center justify-center text-[10px]"><i class="fa-solid fa-user-doctor"></i></div>
-                <span class="text-xs text-slate-500 font-medium">${p.provider}</span>
+            <div class="flex items-center gap-2 mt-4 pt-3 border-t border-slate-50 justify-between">
+                <div class="flex items-center gap-2">
+                    <div class="w-5 h-5 rounded-full bg-indigo-100 text-indigo-500 flex items-center justify-center text-[10px]"><i class="fa-solid fa-user-doctor"></i></div>
+                    <span class="text-xs text-slate-500 font-medium">${p.provider}</span>
+                </div>
+                <button class="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white flex items-center justify-center transition-colors btn-meds" title="View Medications">
+                    <i class="fa-solid fa-pills cursor-pointer"></i>
+                </button>
             </div>
         `;
+
+        // Attach event listener programmatically to keep 'p' in scope
+        const medBtn = card.querySelector('.btn-meds');
+        if (medBtn) {
+            medBtn.onclick = (e) => {
+                e.stopPropagation();
+                openMedicationModal(p);
+            };
+        }
+
         grid.appendChild(card);
     });
 }
@@ -315,7 +330,7 @@ function openModal(patient) {
 
     document.getElementById('modal-patient-name').innerText = patient.name;
     document.getElementById('modal-patient-code').innerText = patient.code;
-    document.getElementById('modal-patient-age').innerText = `${patient.age} Yrs`;
+    document.getElementById('modal-patient-age').innerText = `${parseInt(patient.age)} Yrs`;
     document.getElementById('modal-patient-room').innerText = `Room ${patient.room}`;
 
     document.getElementById('inp-diagnosis').value = patient.diagnosis || '';
@@ -745,5 +760,236 @@ async function startImport() {
     } catch (e) {
         alert("Import Failed: " + e.message);
         closeImportModal();
+    }
+}
+
+// Medication Quick View Logic
+function openMedicationModal(patient) {
+    const modal = document.getElementById('medication-modal');
+    const listContainer = document.getElementById('medication-list-content');
+    const noMedsMsg = document.getElementById('no-meds-msg');
+
+    document.getElementById('med-modal-patient-name').innerText = patient.name;
+    listContainer.innerHTML = '';
+
+    if (!patient.medications || patient.medications.trim() === '') {
+        noMedsMsg.classList.remove('hidden');
+    } else {
+        noMedsMsg.classList.add('hidden');
+        // Split by newlines or commas
+        const meds = patient.medications.split(/\n|,/);
+        meds.forEach(med => {
+            const m = med.trim();
+            if (m) {
+                const li = document.createElement('li');
+                li.className = "flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100";
+                li.innerHTML = `
+                    <div class="mt-1 w-2 h-2 rounded-full bg-indigo-400 flex-shrink-0"></div>
+                    <span class="text-sm text-slate-700 font-medium leading-relaxed">${m}</span>
+                `;
+                listContainer.appendChild(li);
+            }
+        });
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function closeMedicationModal() {
+    document.getElementById('medication-modal').classList.add('hidden');
+}
+
+// Opioid Conversion Logic
+const OPIOID_FACTORS = {
+    'morphine': { po: 1, iv: 3 },
+    'oxycodone': { po: 1.5, iv: null },
+    'hydromorphone': { po: 4, iv: 20 },
+    'codeine': { po: 0.15, iv: null },
+    'tramadol': { po: 0.1, iv: 0.1 },
+    'fentanyl_td': { po: 2.4, iv: null }
+};
+
+function openCalculatorModal() {
+    document.getElementById('calculator-modal').classList.remove('hidden');
+}
+
+function closeCalculatorModal() {
+    document.getElementById('calculator-modal').classList.add('hidden');
+}
+
+function calculateOpioid() {
+    const fromDrug = document.getElementById('calc-from-drug').value;
+    const fromRoute = document.getElementById('calc-from-route').value;
+    const dose = parseFloat(document.getElementById('calc-dose').value);
+    const toDrug = document.getElementById('calc-to-drug').value;
+    const toRoute = document.getElementById('calc-to-route').value;
+    const applyReduction = document.getElementById('calc-apply-reduction').checked;
+
+    if (isNaN(dose) || dose <= 0) {
+        document.getElementById('calc-result').innerText = "Enter Dose";
+        return;
+    }
+
+    // 1. Convert to Daily MME
+    let mme = 0;
+    const factors = OPIOID_FACTORS[fromDrug];
+
+    if (!factors) return;
+
+    if (fromDrug === 'fentanyl_td') {
+        mme = dose * 2.4;
+    } else {
+        const factor = factors[fromRoute] || factors['po'];
+        mme = dose * factor;
+    }
+
+    // 2. Reduction
+    if (applyReduction) {
+        mme = mme * 0.75;
+    }
+
+    // 3. To Target
+    const targetFactors = OPIOID_FACTORS[toDrug];
+    let result = 0;
+
+    if (targetFactors) {
+        const targetFactor = targetFactors[toRoute] || targetFactors['po'];
+        result = mme / targetFactor;
+    }
+
+    document.getElementById('calc-reduction').innerText = applyReduction ? "-25%" : "0%";
+}
+
+// Settings & Theming Logic
+const currentSettings = {
+    theme: localStorage.getItem('app_theme') || 'light',
+    accent: localStorage.getItem('app_accent') || 'blue',
+    design: localStorage.getItem('app_design') || 'default',
+    animations: localStorage.getItem('app_animations') !== 'false'
+};
+
+// Init Settings
+document.addEventListener('DOMContentLoaded', () => {
+    applyTheme(currentSettings.theme);
+    applyAccent(currentSettings.accent);
+    applyDesign(currentSettings.design);
+    applyAnimations(currentSettings.animations);
+});
+
+function openSettingsModal() {
+    document.getElementById('settings-modal').classList.remove('hidden');
+    updateSettingsUI();
+}
+
+function closeSettingsModal() {
+    document.getElementById('settings-modal').classList.add('hidden');
+}
+
+function updateSettingsUI() {
+    // Highlight Active Theme
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+        if (btn.dataset.theme === currentSettings.theme) {
+            btn.classList.add('border-medical-500', 'bg-blue-50');
+        } else {
+            btn.classList.remove('border-medical-500', 'bg-blue-50');
+        }
+    });
+
+    // Highlight Active Design
+    document.querySelectorAll('.design-btn').forEach(btn => {
+        if (btn.dataset.design === currentSettings.design) {
+            btn.classList.add('border-medical-500', 'bg-slate-100');
+        } else {
+            btn.classList.remove('border-medical-500', 'bg-slate-100');
+        }
+    });
+
+    // Toggle Switch logic...
+
+    // Toggle Switch
+    const toggle = document.getElementById('btn-anim-toggle');
+    const knob = toggle.querySelector('div');
+    if (currentSettings.animations) {
+        toggle.classList.add('bg-medical-500', 'bg-green-500'); // ensuring green
+        toggle.classList.remove('bg-slate-300');
+        knob.classList.add('translate-x-6');
+    } else {
+        toggle.classList.remove('bg-medical-500', 'bg-green-500');
+        toggle.classList.add('bg-slate-300');
+        knob.classList.remove('translate-x-6');
+    }
+}
+
+function setTheme(mode) {
+    currentSettings.theme = mode;
+    localStorage.setItem('app_theme', mode);
+    applyTheme(mode);
+    updateSettingsUI();
+}
+
+function applyTheme(mode) {
+    if (mode === 'dark') {
+        document.body.classList.add('theme-dark');
+    } else {
+        document.body.classList.remove('theme-dark');
+    }
+}
+
+function setAccent(color) {
+    currentSettings.accent = color;
+    localStorage.setItem('app_accent', color);
+    applyAccent(color);
+}
+
+function applyAccent(color) {
+    const root = document.documentElement;
+    const colors = {
+        'blue': { primary: '#0ea5e9', dark: '#0284c7' }, // Sky-500/600
+        'teal': { primary: '#14b8a6', dark: '#0d9488' }, // Teal-500/600
+        'rose': { primary: '#f43f5e', dark: '#e11d48' }, // Rose-500/600
+        'indigo': { primary: '#6366f1', dark: '#4f46e5' }  // Indigo-500/600
+    };
+
+    const selected = colors[color] || colors['blue'];
+    root.style.setProperty('--color-primary', selected.primary);
+    root.style.setProperty('--color-primary-dark', selected.dark);
+
+    // Also update theme buttons UI
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+        // Optional: Add active ring color based on accent
+    });
+}
+
+function toggleAnimations() {
+    currentSettings.animations = !currentSettings.animations;
+    localStorage.setItem('app_animations', currentSettings.animations);
+    applyAnimations(currentSettings.animations);
+    updateSettingsUI();
+}
+
+function applyAnimations(enabled) {
+    if (!enabled) {
+        document.body.classList.add('no-animations');
+    } else {
+        document.body.classList.remove('no-animations');
+    }
+}
+
+function setDesign(mode) {
+    currentSettings.design = mode;
+    localStorage.setItem('app_design', mode);
+    applyDesign(mode);
+    updateSettingsUI();
+}
+
+function applyDesign(mode) {
+    // Remove all design classes first
+    document.body.classList.remove('design-glass', 'design-minimal');
+
+    // Add active class if not default
+    if (mode === 'glass') {
+        document.body.classList.add('design-glass');
+    } else if (mode === 'minimal') {
+        document.body.classList.add('design-minimal');
     }
 }

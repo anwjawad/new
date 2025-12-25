@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Palliative Care Rounds</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #f3f4f6;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .modal-enter {
+            opacity: 0;
+            transform: scale(0.95);
+        }
+
+        .modal-enter-active {
+            opacity: 1;
+            transform: scale(1);
+            transition: opacity 200ms, transform 200ms;
+        }
+
+        .modal-exit {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .modal-exit-active {
+            opacity: 0;
+            transform: scale(0.95);
+            transition: opacity 200ms, transform 200ms;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        medical: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            800: '#075985',
+                            900: '#0c4a6e',
+                        },
+                        danger: '#ef4444',
+                        success: '#10b981',
+                        warning: '#f59e0b'
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+
+<body class="h-screen overflow-hidden text-slate-800">
+
+    <!-- Top Navigation -->
+    <nav class="h-16 bg-white shadow-sm flex items-center justify-between px-6 z-10 relative">
+        <div class="flex items-center gap-3">
+            <div class="bg-medical-600 text-white p-2 rounded-lg">
+                <i class="fa-solid fa-heart-pulse text-xl"></i>
+            </div>
+            <h1 class="text-xl font-bold text-slate-800 tracking-tight">Palliative Rounds <span
+                    class="text-xs font-normal text-slate-500 ml-2">v1.0</span></h1>
+        </div>
+        <div class="flex items-center gap-4">
+            <button class="p-2 text-slate-400 hover:text-medical-600 transition-colors"><i
+                    class="fa-solid fa-calculator"></i></button>
+            <button class="p-2 text-slate-400 hover:text-medical-600 transition-colors"><i
+                    class="fa-solid fa-gear"></i></button>
+            <div
+                class="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold text-sm">
+                DR</div>
+        </div>
+    </nav>
+
+    <div class="flex h-[calc(100vh-64px)]">
+        <!-- Sidebar (Wards) -->
+        <aside class="w-64 bg-white border-r border-slate-200 flex flex-col">
+            <div class="p-4">
+                <div class="relative">
+                    <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                    <input type="text" placeholder="Search patients..."
+                        class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-medical-500">
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto py-2">
+                <div class="flex justify-between items-center px-4 mb-2">
+                    <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Wards</h3>
+                    <button onclick="addNewWard()" class="text-slate-400 hover:text-medical-600 text-xs"
+                        title="Add New Ward"><i class="fa-solid fa-plus"></i></button>
+                </div>
+                <div id="wards-list" class="space-y-1 px-2">
+                    <!-- Wards injected via JS -->
+                    <div class="animate-pulse h-10 bg-slate-100 rounded-lg mx-2"></div>
+                </div>
+            </div>
+
+            <div class="p-4 border-t border-slate-100">
+                <button
+                    class="w-full py-2 bg-medical-50 text-medical-700 rounded-lg text-sm font-medium hover:bg-medical-100 transition-colors">
+                    <i class="fa-solid fa-plus mr-2"></i> New Patient
+                </button>
+                <button onclick="openImportModal()"
+                    class="w-full mt-2 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors">
+                    <i class="fa-solid fa-file-import mr-2"></i> Import CSV
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 overflow-y-auto bg-slate-50 p-6 relative">
+            <header class="flex justify-between items-end mb-6">
+                <div>
+                    <h2 id="current-ward-title" class="text-2xl font-bold text-slate-800">Dashboard</h2>
+                    <p class="text-slate-500 text-sm mt-1">Select a ward to view patients</p>
+                </div>
+                <div class="flex gap-2">
+                    <span
+                        class="px-3 py-1 bg-white border border-slate-200 rounded-full text-xs font-medium text-slate-600">Total:
+                        <span id="patient-count">0</span></span>
+                </div>
+            </header>
+
+            <!-- Cards Grid -->
+            <div id="patients-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-20">
+                <!-- Cards injected via JS -->
+            </div>
+        </main>
+    </div>
+
+    <!-- Patient Details Modal -->
+    <div id="patient-modal" class="fixed inset-0 z-50 hidden">
+        <!-- Backdrop -->
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onclick="closeModal()"></div>
+
+        <!-- Modal Content -->
+        <div class="absolute inset-y-0 right-0 w-full max-w-2xl bg-white shadow-2xl transform transition-transform duration-300 translate-x-full overflow-y-auto"
+            id="modal-panel">
+            <div
+                class="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-slate-100 px-6 py-4 flex justify-between items-center">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-800" id="modal-patient-name">Patient Name</h2>
+                    <div class="flex items-center gap-2 text-sm text-slate-500">
+                        <span id="modal-patient-code">ID</span> &bull; <span id="modal-patient-age">Age</span> &bull;
+                        <span id="modal-patient-room">Room</span>
+                    </div>
+                </div>
+                <button onclick="closeModal()"
+                    class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-8">
+                <!-- Labs Section (Horizontal Scroll) -->
+                <section>
+                    <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wide mb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-flask text-medical-600"></i> Critical Labs
+                    </h3>
+                    <div class="flex gap-3 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-hide" id="modal-labs-list">
+                        <!-- Lab items -->
+                    </div>
+                </section>
+
+                <div class="grid grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 uppercase mb-1">Diagnosis</label>
+                        <input id="inp-diagnosis" type="text"
+                            class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium focus:ring-2 focus:ring-medical-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 uppercase mb-1">Provider</label>
+                        <div class="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg">
+                            <div
+                                class="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold">
+                                <i class="fa-solid fa-user-doctor"></i>
+                            </div>
+                            <input id="inp-provider" type="text"
+                                class="bg-transparent w-full text-slate-800 font-medium focus:outline-none">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Symptoms -->
+                <section>
+                    <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wide mb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-notes-medical text-rose-500"></i> Symptoms Assessment
+                    </h3>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3" id="modal-symptoms-grid">
+                        <!-- Symptom Buttons -->
+                    </div>
+                </section>
+
+                <!-- Treatment -->
+                <section>
+                    <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wide mb-3">Current Treatment</h3>
+                    <textarea id="inp-treatment" rows="3"
+                        class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 resize-none focus:ring-2 focus:ring-medical-500 focus:outline-none"></textarea>
+                </section>
+
+                <!-- Medication List -->
+                <section>
+                    <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wide mb-3">Medication List</h3>
+                    <textarea id="inp-medications" rows="3"
+                        class="w-full p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-slate-700 resize-none focus:ring-2 focus:ring-indigo-500 focus:outline-none placeholder-slate-400"
+                        placeholder="List current medications..."></textarea>
+                </section>
+
+                <!-- Notes -->
+                <section>
+                    <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wide mb-3">Clinical Notes</h3>
+                    <textarea id="inp-notes" rows="4"
+                        class="w-full p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-slate-700 resize-none focus:ring-2 focus:ring-yellow-500 focus:outline-none placeholder-slate-400"
+                        placeholder="Write handover notes here..."></textarea>
+                </section>
+
+            </div>
+
+            <!-- Sticky Footer for Save Status -->
+            <div
+                class="sticky bottom-0 bg-white border-t border-slate-100 p-4 px-6 flex justify-between items-center text-xs text-slate-500">
+                <span id="save-status"><i class="fa-solid fa-check text-green-500 mr-1"></i> All changes saved</span>
+                <span id="last-edited">Edited just now</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Modal -->
+    <div id="import-modal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onclick="closeImportModal()"></div>
+        <div
+            class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 class="font-bold text-lg text-slate-800"><i
+                        class="fa-solid fa-file-csv text-green-600 mr-2"></i>Smart Import</h3>
+                <button onclick="closeImportModal()" class="text-slate-400 hover:text-slate-600"><i
+                        class="fa-solid fa-times"></i></button>
+            </div>
+
+            <div class="p-6">
+                <!-- Step 1: Upload -->
+                <div id="import-step-1" class="space-y-4">
+                    <div class="text-center py-6 border-2 border-dashed border-slate-200 rounded-xl hover:border-medical-400 hover:bg-slate-50 transition-colors cursor-pointer"
+                        onclick="document.getElementById('csv-file-input').click()">
+                        <i class="fa-solid fa-cloud-arrow-up text-3xl text-slate-300 mb-2"></i>
+                        <p class="text-slate-600 font-medium text-sm">Upload Excel / CSV</p>
+                        <input type="file" id="csv-file-input" class="hidden" accept=".csv, .xlsx, .xls"
+                            onchange="handleFileSelect(event)">
+                    </div>
+
+                    <div class="relative">
+                        <div class="absolute inset-0 flex items-center">
+                            <div class="w-full border-t border-slate-200"></div>
+                        </div>
+                        <div class="relative flex justify-center text-xs uppercase">
+                            <span class="bg-white px-2 text-slate-400">Or Paste Data</span>
+                        </div>
+                    </div>
+
+                    <textarea id="paste-input" rows="3"
+                        class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:ring-2 focus:ring-medical-500 focus:outline-none"
+                        placeholder="Paste your Excel table here (Headers + Data)..."
+                        oninput="checkPasteInput()"></textarea>
+
+                    <button id="btn-process-paste" onclick="handlePaste()"
+                        class="w-full py-2 bg-slate-200 text-slate-400 font-bold text-sm rounded-lg cursor-not-allowed transition-colors"
+                        disabled>
+                        Process Pasted Data
+                    </button>
+                </div>
+
+                <!-- Step 2: Mapping -->
+                <div id="import-step-2" class="hidden space-y-4">
+                    <p class="text-sm text-slate-500 mb-2">Map columns from your CSV to the application fields.</p>
+                    <div class="max-h-60 overflow-y-auto border border-slate-200 rounded-lg">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
+                                <tr>
+                                    <th class="px-4 py-2 w-1/2">App Field</th>
+                                    <th class="px-4 py-2 w-1/2">CSV Column</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mapping-table-body" class="divide-y divide-slate-100">
+                                <!-- Mapping rows injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Step 3: Loading -->
+                <div id="import-step-3" class="hidden text-center py-8">
+                    <i class="fa-solid fa-circle-notch fa-spin text-4xl text-medical-500 mb-4"></i>
+                    <p class="text-lg font-bold text-slate-800">Importing Patients...</p>
+                    <p class="text-slate-500 text-sm" id="import-status-text">Please wait</p>
+                </div>
+            </div>
+
+            <div class="bg-slate-50 px-6 py-4 flex justify-end gap-3" id="import-footer">
+                <button onclick="closeImportModal()"
+                    class="px-4 py-2 text-slate-600 font-medium text-sm hover:bg-slate-200 rounded-lg">Cancel</button>
+                <button onclick="startImport()" id="btn-start-import"
+                    class="px-4 py-2 bg-slate-300 text-white font-bold text-sm rounded-lg cursor-not-allowed"
+                    disabled>Start Import</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/main.js"></script>
+</body>
+
+</html>
